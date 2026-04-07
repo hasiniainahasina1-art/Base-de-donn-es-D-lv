@@ -1,224 +1,152 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Scanner code-barres - Caméra arrière</title>
-    <style>
-        body {
-            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            background: #f0f0f0;
-            margin: 0;
-            padding: 20px;
-            text-align: center;
-        }
-        .container {
-            max-width: 700px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 24px;
-            padding: 20px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-        }
-        h1 {
-            font-size: 1.5rem;
-            margin: 0 0 10px;
-            color: #1e3c72;
-        }
-        p {
-            color: #2c3e66;
-            margin-bottom: 20px;
-        }
-        #reader {
-            width: 100%;
-            border-radius: 16px;
-            overflow: hidden;
-            background: #111;
-        }
-        #result {
-            margin: 20px 0;
-            font-weight: 500;
-            word-break: break-word;
-            background: #eef2ff;
-            padding: 12px;
-            border-radius: 16px;
-            color: #0a2540;
-        }
-        button {
-            background: #1e3c72;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            font-size: 1rem;
-            border-radius: 40px;
-            cursor: pointer;
-            transition: 0.2s;
-            margin-top: 10px;
-        }
-        button:hover {
-            background: #0f2b4f;
-        }
-        select {
-            padding: 8px 12px;
-            margin: 15px 0;
-            border-radius: 40px;
-            border: 1px solid #ccc;
-            font-size: 0.9rem;
-        }
-        .status {
-            font-size: 0.85rem;
-            color: #555;
-            margin-top: 12px;
-        }
-        @media (max-width: 600px) {
-            body { padding: 12px; }
-            .container { padding: 16px; }
-        }
-    </style>
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner code-barres PRO</title>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+body {
+    font-family: system-ui;
+    background: #f0f0f0;
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+}
+
+.container {
+    max-width: 700px;
+    margin: auto;
+    background: white;
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+}
+
+h1 {
+    color: #1e3c72;
+}
+
+#reader {
+    width: 100%;
+    border-radius: 16px;
+    overflow: hidden;
+    background: black;
+    margin-top: 10px;
+}
+
+#result {
+    margin-top: 20px;
+    padding: 12px;
+    background: #eef2ff;
+    border-radius: 12px;
+}
+
+button {
+    margin-top: 15px;
+    padding: 12px 20px;
+    border-radius: 30px;
+    border: none;
+    background: #1e3c72;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0f2b4f;
+}
+</style>
 </head>
+
 <body>
+
 <div class="container">
-    <h1>📷 Scanner code-barres</h1>
-    <p>📱 Utilise la CAMÉRA ARRIÈRE par défaut</p>
+    <h1>📷 Scanner (Caméra arrière)</h1>
 
     <div id="reader"></div>
 
-    <select id="cameraSelect"></select>
-    <div id="result">
-        ⏳ Démarrage de la caméra arrière...
-    </div>
-    <button id="resetBtn">🔄 Changer de caméra</button>
-    <div class="status">
-        ✔️ Caméra arrière activée automatiquement
-    </div>
+    <div id="result">⏳ Initialisation...</div>
+
+    <button id="restartBtn">🔄 Redémarrer</button>
 </div>
 
 <script>
-    let html5QrCode = null;
-    let isScanning = false;
-    let currentCameraId = null;
-    let useBackCamera = true; // On force la caméra arrière
+let html5QrCode;
+let isScanning = false;
 
-    const readerDiv = document.getElementById('reader');
-    const resultDiv = document.getElementById('result');
-    const cameraSelect = document.getElementById('cameraSelect');
+const resultDiv = document.getElementById('result');
 
-    // Fonction pour démarrer le scan avec une caméra spécifique ou en mode "environment"
-    async function startScanner(cameraIdOrFacingMode) {
-        if (html5QrCode && isScanning) {
-            await html5QrCode.stop();
-            isScanning = false;
-        }
-
+// ✅ Démarrer scanner caméra arrière uniquement
+async function startScanner() {
+    try {
         if (!html5QrCode) {
             html5QrCode = new Html5Qrcode("reader");
         }
 
-        const config = {
-            fps: 10,
-            qrbox: { width: 280, height: 200 },
-            aspectRatio: 1.333
-        };
-
-        try {
-            // Si on passe un string commençant par "environment", on utilise facingMode
-            if (typeof cameraIdOrFacingMode === 'string' && cameraIdOrFacingMode === 'environment') {
-                await html5QrCode.start(
-                    { facingMode: "environment" }, // force la caméra arrière
-                    config,
-                    onScanSuccess,
-                    onScanFailure
-                );
-                resultDiv.innerHTML = "📸 Caméra ARRIÈRE active – scan en cours...";
-            } else {
-                // Sinon on utilise l'ID de la caméra
-                await html5QrCode.start(
-                    cameraIdOrFacingMode,
-                    config,
-                    onScanSuccess,
-                    onScanFailure
-                );
-                resultDiv.innerHTML = "📸 Caméra active – scan en cours...";
-            }
-            isScanning = true;
-        } catch (err) {
-            console.error("Erreur démarrage caméra :", err);
-            resultDiv.innerHTML = "❌ Impossible d'accéder à la caméra arrière. Vérifiez les permissions.";
-            // Fallback : essayer la première caméra disponible
-            if (useBackCamera) {
-                resultDiv.innerHTML += "<br>🔁 Tentative avec la caméra par défaut...";
-                await listCamerasAndStart();
-            }
-        }
-    }
-
-    function onScanSuccess(decodedText, decodedResult) {
-        resultDiv.innerHTML = `✅ Code scanné : <strong>${decodedText}</strong><br><span style="font-size:0.8rem;">Format : ${decodedResult.result.format.formatName}</span>`;
-        // Optionnel : faire biper ou vibrer (si supporté)
-        if (navigator.vibrate) navigator.vibrate(200);
-    }
-
-    function onScanFailure(errorMessage) {
-        // Ignorer les erreurs normales (pas de code détecté)
-    }
-
-    async function stopScanner() {
-        if (html5QrCode && isScanning) {
+        if (isScanning) {
             await html5QrCode.stop();
-            isScanning = false;
         }
+
+        resultDiv.textContent = "📸 Activation caméra arrière...";
+
+        await html5QrCode.start(
+            { facingMode: "environment" }, // 🔥 caméra arrière uniquement
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 180 }
+            },
+            onScanSuccess
+        );
+
+        isScanning = true;
+        resultDiv.textContent = "✅ Scanner actif (caméra arrière)";
+    } catch (err) {
+        console.error(err);
+        resultDiv.textContent = "❌ Caméra arrière indisponible ou permission refusée.";
     }
+}
 
-    // Récupérer les caméras pour le select (optionnel)
-    async function listCamerasAndStart() {
-        try {
-            const devices = await Html5Qrcode.getCameras();
-            if (!devices || devices.length === 0) {
-                resultDiv.innerHTML = "⚠️ Aucune caméra trouvée.";
-                return;
-            }
+// ✅ Scan réussi
+function onScanSuccess(decodedText, decodedResult) {
+    resultDiv.innerHTML =
+        "✅ Code : <b>" + escapeHtml(decodedText) + "</b>";
 
-            // Remplir le select avec toutes les caméras
-            cameraSelect.innerHTML = '<option value="">-- Choisir une caméra --</option>';
-            devices.forEach((device, idx) => {
-                const option = document.createElement('option');
-                option.value = device.id;
-                let label = device.label || `Caméra ${idx + 1}`;
-                // Indiquer la caméra arrière si détectée
-                if (label.toLowerCase().includes('back') || label.toLowerCase().includes('arrière') || label.toLowerCase().includes('environment')) {
-                    label += " (arrière)";
-                }
-                option.textContent = label;
-                cameraSelect.appendChild(option);
-            });
+    if (navigator.vibrate) navigator.vibrate(200);
+}
 
-            // Essayer d'abord la caméra arrière via facingMode
-            await startScanner('environment');
-            
-            // Écouter le changement manuel
-            cameraSelect.addEventListener('change', async () => {
-                const selectedId = cameraSelect.value;
-                if (selectedId) {
-                    await startScanner(selectedId);
-                }
-            });
-
-        } catch (err) {
-            console.error("Erreur accès caméras :", err);
-            // En dernier recours, essayer le facingMode
-            await startScanner('environment');
-        }
+// ✅ Stop scanner
+async function stopScanner() {
+    if (html5QrCode && isScanning) {
+        await html5QrCode.stop();
+        isScanning = false;
     }
+}
 
-    // Bouton reset / stop puis redémarrage
-    document.getElementById('resetBtn').addEventListener('click', async () => {
-        await stopScanner();
-        listCamerasAndStart();
+// ✅ Sécurité (éviter HTML injection)
+function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, function(m) {
+        return ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#039;"
+        })[m];
     });
+}
 
-    // Initialisation
-    listCamerasAndStart();
+// ✅ Bouton restart
+document.getElementById("restartBtn").addEventListener("click", async () => {
+    await stopScanner();
+    startScanner();
+});
+
+// ✅ Lancement initial
+startScanner();
+
 </script>
+
 </body>
 </html>
