@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Scanner code-barres</title>
+    <style>
+        body { font-family: system-ui; background: #f0f2f5; padding: 20px; text-align: center; }
+        .container { max-width: 650px; margin: auto; background: white; border-radius: 24px; padding: 20px; }
+        #reader { width: 100%; border-radius: 16px; overflow: hidden; background: #000; }
+        #result { margin: 20px 0; padding: 12px; background: #eef2ff; border-radius: 16px; }
+        button { background: #1e3c72; color: white; border: none; padding: 12px 24px; border-radius: 40px; cursor: pointer; margin-top: 10px; }
+        .error-msg { color: #c00; background: #ffe6e6; padding: 12px; border-radius: 16px; margin-top: 12px; }
+    </style>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>📷 Scanner code-barres</h1>
+    <div id="reader"></div>
+    <div id="result">🔍 Initialisation de la caméra...</div>
+    <button id="retryBtn">🔄 Réessayer / Changer caméra</button>
+    <div id="errorBox" class="error-msg" style="display:none;"></div>
+</div>
+
+<script>
+    let html5QrCode = null;
+    let isScanning = false;
+    let currentCameraId = null;
+
+    const readerDiv = document.getElementById('reader');
+    const resultDiv = document.getElementById('result');
+    const errorBox = document.getElementById('errorBox');
+
+    async function startScanner(cameraId) {
+        if (html5QrCode && isScanning) {
+            await html5QrCode.stop();
+            isScanning = false;
+        }
+        if (!html5QrCode) {
+            html5QrCode = new Html5Qrcode("reader");
+        }
+        const config = { fps: 10, qrbox: { width: 280, height: 200 }, aspectRatio: 1.333 };
+        try {
+            await html5QrCode.start(cameraId, config, onScanSuccess, onScanFailure);
+            isScanning = true;
+            resultDiv.innerHTML = "📸 Caméra active – scan en cours...";
+            errorBox.style.display = "none";
+        } catch (err) {
+            console.error(err);
+            let msg = "Impossible d'accéder à la caméra. ";
+            if (err.name === "NotAllowedError") msg += "Permission refusée. Autorisez la caméra dans les paramètres du navigateur.";
+            else if (err.name === "NotFoundError") msg += "Aucune caméra trouvée sur cet appareil.";
+            else msg += "Vérifiez que vous utilisez HTTPS ou localhost (pas file://).";
+            resultDiv.innerHTML = "❌ " + msg;
+            errorBox.innerText = msg;
+            errorBox.style.display = "block";
+        }
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+        resultDiv.innerHTML = `✅ Scanné : <strong>${decodedText}</strong><br><small>Format : ${decodedResult.result.format.formatName}</small>`;
+        // Optionnel : arrêter après 2 secondes pour éviter les scans répétés
+        // setTimeout(() => stopScanner(), 2000);
+    }
+
+    function onScanFailure() { /* ignoré */ }
+
+    async function stopScanner() {
+        if (html5QrCode && isScanning) {
+            await html5QrCode.stop();
+            isScanning = false;
+        }
+    }
+
+    async function initAndStart() {
+        try {
+            const devices = await Html5Qrcode.getCameras();
+            if (!devices || devices.length === 0) throw new Error("Aucune caméra");
+            currentCameraId = devices[0].id;
+            await startScanner(currentCameraId);
+        } catch (err) {
+            console.error(err);
+            resultDiv.innerHTML = "⚠️ Aucune caméra détectée ou permission non accordée.";
+            errorBox.innerText = "Impossible de lister les caméras. Vérifiez que la page est servie en HTTPS/localhost et que vous avez autorisé l'accès.";
+            errorBox.style.display = "block";
+        }
+    }
+
+    document.getElementById('retryBtn').addEventListener('click', async () => {
+        await stopScanner();
+        initAndStart();
+    });
+
+    initAndStart();
+</script>
+</body>
+</html>
