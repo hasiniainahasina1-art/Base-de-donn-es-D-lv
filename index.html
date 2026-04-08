@@ -2,8 +2,8 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scanner YAS PRO</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Scanner BOTAKI - Arrêt après scan</title>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
@@ -12,27 +12,24 @@
     --blue:#0057b8;
     --yellow:#ffd100;
 }
-
 body{
     margin:0;
-    font-family:system-ui;
+    font-family:system-ui, -apple-system, 'Segoe UI', Roboto;
     background:#f4f6fb;
 }
-
 .header{
     background:linear-gradient(135deg,var(--blue),#003d82);
     color:white;
     padding:15px;
     text-align:center;
     font-weight:bold;
+    font-size:1.2rem;
 }
-
 .container{
     max-width:900px;
     margin:auto;
     padding:15px;
 }
-
 .card{
     background:white;
     border-radius:20px;
@@ -40,15 +37,13 @@ body{
     box-shadow:0 10px 25px rgba(0,0,0,0.1);
     margin-bottom:15px;
 }
-
 #reader{
     width:100%;
     border-radius:15px;
     overflow:hidden;
     background:black;
-    min-height:300px;
+    min-height:280px;
 }
-
 .status{
     margin-top:10px;
     padding:10px;
@@ -56,58 +51,62 @@ body{
     background:#eef2ff;
     font-weight:bold;
 }
-
 .buttons{
     display:grid;
     grid-template-columns:repeat(3,1fr);
     gap:8px;
     margin-top:10px;
 }
-
 button{
     padding:10px;
     border:none;
     border-radius:20px;
     font-weight:bold;
     cursor:pointer;
+    transition:0.2s;
 }
-
 .primary{background:var(--blue);color:white;}
 .yellow{background:var(--yellow);}
 .danger{background:#ff4d4d;color:white;}
 .success{background:#2ecc71;color:white;}
-
+.secondary{background:#6c757d;color:white;}
 .history{
     max-height:250px;
     overflow:auto;
 }
-
 .item{
     background:#f1f3f9;
     padding:8px;
     border-radius:8px;
     margin-bottom:5px;
     font-size:0.9rem;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+.item small{
+    font-size:0.7rem;
+    color:#555;
 }
 </style>
 </head>
-
 <body>
 
-<div class="header">📷 Scanner YAS PRO</div>
+<div class="header">📷 Scanner BOTAKI - Arrêt auto après scan</div>
 
 <div class="container">
 
 <div class="card">
     <div id="reader"></div>
-    <div id="status" class="status">⏳ Prêt à scanner</div>
+    <div id="status" class="status">⏳ Prêt - Appuyez sur Démarrer</div>
 
     <div class="buttons">
-        <button class="primary" id="startBtn">📷 Scanner</button>
+        <button class="primary" id="startBtn">📷 Démarrer</button>
+        <button class="secondary" id="stopBtn">⏹ Arrêter</button>
         <button class="yellow" id="flashBtn">⚡ Flash</button>
         <button class="success" id="exportBtn">📤 Export</button>
         <button class="primary" id="copyBtn">📋 Copier</button>
-        <button class="danger" id="clearBtn">🗑️ Clear</button>
+        <button class="danger" id="clearBtn">🗑 Clear</button>
         <button onclick="history.back()">⬅️ Retour</button>
     </div>
 </div>
@@ -115,142 +114,199 @@ button{
 <div class="card">
     <b>Dernier scan :</b>
     <div id="lastScan">---</div>
+    <div id="lastFormat" style="font-size:0.8rem; color:#555;">---</div>
 </div>
 
 <div class="card">
-    <b>Historique :</b>
+    <b>Historique (max 50) :</b>
     <div id="history" class="history"></div>
 </div>
 
 </div>
 
 <script>
-let html5QrCode;
-let isScanning=false;
-let lastScan="";
+let html5QrCode = null;
+let isScanning = false;
+let lastScan = "";
+let flashActive = false;
+
 let historyData = JSON.parse(localStorage.getItem("scans") || "[]");
-let flashOn=false;
 
 const statusEl = document.getElementById("status");
 const historyEl = document.getElementById("history");
+const lastScanEl = document.getElementById("lastScan");
+const lastFormatEl = document.getElementById("lastFormat");
 
-// 🔊 son
-const beep = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-
-// sauvegarde
-function saveHistory(){
-    localStorage.setItem("scans", JSON.stringify(historyData));
+// 🔔 Bip sonore uniquement (pas de vibration)
+function playBeep() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.frequency.value = 880;
+        gainNode.gain.value = 0.15;
+        oscillator.start();
+        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.25);
+        oscillator.stop(audioCtx.currentTime + 0.25);
+        audioCtx.resume();
+    } catch(e) { console.warn("beep error", e); }
 }
 
-// affichage historique
-function updateHistory(){
-    historyEl.innerHTML="";
-    historyData.slice(0,50).forEach(item=>{
-        let div=document.createElement("div");
-        div.className="item";
-        div.textContent=item;
+// Sauvegarde historique
+function saveHistory() {
+    localStorage.setItem("scans", JSON.stringify(historyData.slice(0,50)));
+}
+
+// Affichage historique
+function updateHistory() {
+    historyEl.innerHTML = "";
+    historyData.slice(0,50).forEach(item => {
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = `<span>${escapeHtml(item.code)}</span><small>${item.format || "code-barres"}</small>`;
         historyEl.appendChild(div);
+    });
+}
+function escapeHtml(str) {
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
     });
 }
 updateHistory();
 
-// 🚀 démarrer scan
-async function startScanner(){
-    try{
-        if(!html5QrCode){
-            html5QrCode=new Html5Qrcode("reader");
-        }
+// Contrôle du flash (torche)
+async function setFlash(enable) {
+    if (!html5QrCode || !isScanning) return;
+    try {
+        const stream = html5QrCode.getRunningStream();
+        if (!stream) throw new Error("No stream");
+        const track = stream.getVideoTracks()[0];
+        if (!track) throw new Error("No video track");
+        const capabilities = track.getCapabilities();
+        if (!capabilities.torch) throw new Error("Flash not supported");
+        await track.applyConstraints({ advanced: [{ torch: enable }] });
+        flashActive = enable;
+        document.getElementById("flashBtn").style.background = enable ? "#ffaa00" : "";
+    } catch(e) {
+        console.error("Flash error", e);
+        statusEl.textContent = "⚠️ Flash non supporté sur cette caméra";
+        setTimeout(() => { if (statusEl.textContent.includes("Flash")) statusEl.textContent = "📸 Scanner actif (arrière)"; }, 1500);
+    }
+}
 
-        if(isScanning){
+// Démarrer le scanner (caméra arrière uniquement)
+async function startScanner() {
+    try {
+        if (html5QrCode && isScanning) {
             await html5QrCode.stop();
+            isScanning = false;
+            flashActive = false;
+        }
+        if (!html5QrCode) {
+            html5QrCode = new Html5Qrcode("reader");
         }
 
+        const config = {
+            fps: 15,
+            qrbox: { width: 280, height: 200 },
+            aspectRatio: 1.333
+        };
+
+        // Force caméra arrière
         await html5QrCode.start(
-            {facingMode:"environment"},
-            {fps:15, qrbox:{width:250,height:180}},
-            onScanSuccess
+            { facingMode: "environment" },
+            config,
+            onScanSuccess,
+            (errorMsg) => { /* ignoré */ }
         );
-
-        isScanning=true;
-        statusEl.textContent="📸 Scanner actif";
-
-    }catch(err){
-        statusEl.textContent="❌ Erreur caméra";
+        isScanning = true;
+        statusEl.textContent = "📸 Scanner actif (caméra arrière)";
+        if (flashActive) setFlash(true);
+    } catch (err) {
         console.error(err);
+        statusEl.textContent = "❌ Erreur caméra : vérifiez permissions et HTTPS";
+        if (err.name === "NotAllowedError") statusEl.textContent += " - Permission refusée";
+        else if (err.name === "NotFoundError") statusEl.textContent += " - Aucune caméra trouvée";
     }
 }
 
-// ✅ scan réussi + STOP caméra
-async function onScanSuccess(text){
-
-    if(text===lastScan) return;
-    lastScan=text;
-
-    document.getElementById("lastScan").textContent=text;
-
-    historyData.unshift(text);
-    saveHistory();
-    updateHistory();
-
-    // 🔊 + 📳
-    if(navigator.vibrate) navigator.vibrate(200);
-    try{
-        beep.currentTime=0;
-        beep.play();
-    }catch(e){}
-
-    // 🛑 arrêter caméra
-    if(html5QrCode && isScanning){
+// Arrêter le scanner
+async function stopScanner() {
+    if (html5QrCode && isScanning) {
         await html5QrCode.stop();
-        isScanning=false;
+        isScanning = false;
+        flashActive = false;
+        statusEl.textContent = "⏸ Scanner arrêté";
     }
-
-    statusEl.textContent="✅ Scan terminé (appuie sur Scanner)";
 }
 
-// ⚡ flash
-document.getElementById("flashBtn").onclick = async ()=>{
-    try{
-        flashOn=!flashOn;
-        await html5QrCode.applyVideoConstraints({
-            advanced:[{torch:flashOn}]
-        });
-    }catch(e){
-        alert("Flash non supporté");
-    }
-};
+// Traitement d'un scan réussi → on arrête la caméra
+async function onScanSuccess(decodedText, decodedResult) {
+    // Éviter les doublons en cas de callback rapide
+    if (decodedText === lastScan) return;
 
-// 📷 bouton scanner (manuel)
-document.getElementById("startBtn").onclick = ()=>{
-    startScanner();
-};
+    lastScan = decodedText;
+    const format = decodedResult.result.format.formatName || "code-barres";
+    lastScanEl.textContent = decodedText;
+    lastFormatEl.textContent = `Type : ${format}`;
 
-// 📋 copier
-document.getElementById("copyBtn").onclick=()=>{
-    if(!lastScan) return;
-    navigator.clipboard.writeText(lastScan);
-    alert("Copié !");
-};
-
-// 🗑️ clear
-document.getElementById("clearBtn").onclick=()=>{
-    historyData=[];
+    // Ajout à l'historique
+    historyData.unshift({ code: decodedText, format: format });
     saveHistory();
     updateHistory();
+
+    // Bip sonore seulement
+    playBeep();
+
+    // 🔴 Arrêter la caméra après le scan
+    await stopScanner();
+    statusEl.textContent = `✅ Scanné : ${decodedText} - Appuyez sur Démarrer pour un nouveau scan`;
+}
+
+// Événements des boutons
+document.getElementById("startBtn").onclick = () => startScanner();
+document.getElementById("stopBtn").onclick = () => stopScanner();
+document.getElementById("flashBtn").onclick = async () => {
+    if (!isScanning) {
+        statusEl.textContent = "Démarrez d'abord la caméra";
+        return;
+    }
+    await setFlash(!flashActive);
 };
-
-// 📤 export CSV
-document.getElementById("exportBtn").onclick=()=>{
-    let csv="Code\n";
-    historyData.forEach(c=> csv+=c+"\n");
-
-    let blob=new Blob([csv],{type:"text/csv"});
-    let a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download="scans.csv";
+document.getElementById("copyBtn").onclick = () => {
+    if (!lastScan) return;
+    navigator.clipboard.writeText(lastScan);
+    alert("Dernier code copié : " + lastScan);
+};
+document.getElementById("clearBtn").onclick = () => {
+    historyData = [];
+    saveHistory();
+    updateHistory();
+    lastScan = "";
+    lastScanEl.textContent = "---";
+    lastFormatEl.textContent = "---";
+};
+document.getElementById("exportBtn").onclick = () => {
+    let csv = "Code,Format\n";
+    historyData.forEach(item => {
+        let code = item.code.replace(/"/g, '""');
+        csv += `"${code}","${item.format}"\n`;
+    });
+    const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "scans_botaki.csv";
     a.click();
+    URL.revokeObjectURL(a.href);
 };
-</script>
 
+// Initialisation
+statusEl.textContent = "Appuyez sur Démarrer (caméra arrière) - La caméra s'arrêtera après chaque scan";
+</script>
 </body>
 </html>
