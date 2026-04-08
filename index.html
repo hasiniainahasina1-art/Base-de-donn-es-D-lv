@@ -134,7 +134,7 @@ let flashOn=false;
 const statusEl = document.getElementById("status");
 const historyEl = document.getElementById("history");
 
-// 🔊 son (toujours présent)
+// 🔊 son
 const beep = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
 
 // sauvegarde
@@ -180,7 +180,7 @@ async function startScanner(){
     }
 }
 
-// ✅ scan réussi + STOP caméra (sans vibration)
+// ✅ scan réussi + STOP caméra (vibration SUPPRIMÉE)
 async function onScanSuccess(text){
 
     if(text===lastScan) return;
@@ -192,7 +192,7 @@ async function onScanSuccess(text){
     saveHistory();
     updateHistory();
 
-    // 🔇 Vibration supprimée, seul le bip reste
+    // 🔊 uniquement bip (pas de vibration)
     try{
         beep.currentTime=0;
         beep.play();
@@ -207,34 +207,19 @@ async function onScanSuccess(text){
     statusEl.textContent="✅ Scan terminé (appuie sur Scanner)";
 }
 
-// ⚡ Flash CORRIGÉ (fonctionnel)
+// ⚡ flash (inchangé, tel que dans votre code original qui fonctionne)
 document.getElementById("flashBtn").onclick = async ()=>{
-    if(!html5QrCode || !isScanning){
-        alert("Démarrez d'abord le scanner");
-        return;
-    }
     try{
-        flashOn = !flashOn;
-        // Récupérer le flux vidéo actif
-        const stream = html5QrCode.getRunningStream();
-        if(!stream) throw new Error("Pas de flux");
-        const track = stream.getVideoTracks()[0];
-        if(!track) throw new Error("Pas de piste vidéo");
-        // Vérifier si le flash (torch) est supporté
-        const capabilities = track.getCapabilities();
-        if(!capabilities.torch) throw new Error("Flash non supporté");
-        // Appliquer le torch
-        await track.applyConstraints({ advanced: [{ torch: flashOn }] });
-        // Changer le style du bouton pour indiquer l'état
-        document.getElementById("flashBtn").style.background = flashOn ? "#ffaa00" : "";
+        flashOn=!flashOn;
+        await html5QrCode.applyVideoConstraints({
+            advanced:[{torch:flashOn}]
+        });
     }catch(e){
-        alert("Flash non supporté sur cet appareil");
-        console.error(e);
-        flashOn = false;
+        alert("Flash non supporté");
     }
 };
 
-// 📷 bouton scanner
+// 📷 bouton scanner (manuel)
 document.getElementById("startBtn").onclick = ()=>{
     startScanner();
 };
