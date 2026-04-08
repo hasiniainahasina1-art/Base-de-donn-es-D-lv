@@ -11,7 +11,6 @@
 :root{
     --blue:#0057b8;
     --yellow:#ffd100;
-    --dark:#0a1f44;
 }
 
 body{
@@ -26,7 +25,6 @@ body{
     padding:15px;
     text-align:center;
     font-weight:bold;
-    font-size:1.2rem;
 }
 
 .container{
@@ -102,10 +100,10 @@ button{
 
 <div class="card">
     <div id="reader"></div>
-    <div id="status" class="status">⏳ Démarrage...</div>
+    <div id="status" class="status">⏳ Prêt à scanner</div>
 
     <div class="buttons">
-        <button class="primary" id="restartBtn">🔄 Restart</button>
+        <button class="primary" id="startBtn">📷 Scanner</button>
         <button class="yellow" id="flashBtn">⚡ Flash</button>
         <button class="success" id="exportBtn">📤 Export</button>
         <button class="primary" id="copyBtn">📋 Copier</button>
@@ -136,10 +134,15 @@ let flashOn=false;
 const statusEl = document.getElementById("status");
 const historyEl = document.getElementById("history");
 
+// 🔊 son
+const beep = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+
+// sauvegarde
 function saveHistory(){
     localStorage.setItem("scans", JSON.stringify(historyData));
 }
 
+// affichage historique
 function updateHistory(){
     historyEl.innerHTML="";
     historyData.slice(0,50).forEach(item=>{
@@ -149,9 +152,9 @@ function updateHistory(){
         historyEl.appendChild(div);
     });
 }
-
 updateHistory();
 
+// 🚀 démarrer scan
 async function startScanner(){
     try{
         if(!html5QrCode){
@@ -169,7 +172,7 @@ async function startScanner(){
         );
 
         isScanning=true;
-        statusEl.textContent="✅ Scanner actif";
+        statusEl.textContent="📸 Scanner actif";
 
     }catch(err){
         statusEl.textContent="❌ Erreur caméra";
@@ -177,7 +180,9 @@ async function startScanner(){
     }
 }
 
-function onScanSuccess(text){
+// ✅ scan réussi + STOP caméra
+async function onScanSuccess(text){
+
     if(text===lastScan) return;
     lastScan=text;
 
@@ -187,10 +192,23 @@ function onScanSuccess(text){
     saveHistory();
     updateHistory();
 
+    // 🔊 + 📳
     if(navigator.vibrate) navigator.vibrate(200);
+    try{
+        beep.currentTime=0;
+        beep.play();
+    }catch(e){}
+
+    // 🛑 arrêter caméra
+    if(html5QrCode && isScanning){
+        await html5QrCode.stop();
+        isScanning=false;
+    }
+
+    statusEl.textContent="✅ Scan terminé (appuie sur Scanner)";
 }
 
-// Flash
+// ⚡ flash
 document.getElementById("flashBtn").onclick = async ()=>{
     try{
         flashOn=!flashOn;
@@ -202,30 +220,26 @@ document.getElementById("flashBtn").onclick = async ()=>{
     }
 };
 
-// Restart
-document.getElementById("restartBtn").onclick = async ()=>{
-    if(isScanning){
-        await html5QrCode.stop();
-        isScanning=false;
-    }
+// 📷 bouton scanner (manuel)
+document.getElementById("startBtn").onclick = ()=>{
     startScanner();
 };
 
-// Copier
+// 📋 copier
 document.getElementById("copyBtn").onclick=()=>{
     if(!lastScan) return;
     navigator.clipboard.writeText(lastScan);
     alert("Copié !");
 };
 
-// Clear
+// 🗑️ clear
 document.getElementById("clearBtn").onclick=()=>{
     historyData=[];
     saveHistory();
     updateHistory();
 };
 
-// Export CSV
+// 📤 export CSV
 document.getElementById("exportBtn").onclick=()=>{
     let csv="Code\n";
     historyData.forEach(c=> csv+=c+"\n");
@@ -236,8 +250,6 @@ document.getElementById("exportBtn").onclick=()=>{
     a.download="scans.csv";
     a.click();
 };
-
-startScanner();
 </script>
 
 </body>
